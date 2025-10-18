@@ -1,0 +1,79 @@
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import streamlit as st
+
+# Sample Music Dataset (replace with your actual data)
+data = {
+    'song_name': ['Rowdy Baby', 'Innum Konjam Naeram', 'Vaseegara', 'Why This Kolaveri Di', 'Anbil Avan',
+                  'Munbe Vaa', 'Appadi Podu', 'Enna Sona', 'Kutti Story', 'Vaathi Coming'],
+    'singer': ['Dhanush & Dhee', 'GV Prakash Kumar & Saindhavi', 'Bombay Jayashri & Harris Jayaraj', 'Dhanush', 'Shreya Ghoshal & Harris Jayaraj',
+               'Naresh Iyer & Shreya Ghoshal', 'Anushka Manchanda, Benny Dayal, Blaaze', 'Sid Sriram & Darshan Raval', 'Vijay & Anirudh Ravichander', 'Anirudh Ravichander & Gana Balachandar'],
+    'genre': ['Tamil Pop', 'Tamil Romantic', 'Tamil Romantic', 'Tamil Folk Pop', 'Tamil Romantic',
+              'Tamil Romantic', 'Tamil Dance', 'Tamil Romantic', 'Tamil Pop', 'Tamil Dance'],
+    'mood': ['Energetic', 'Melancholic', 'Love', 'Humorous', 'Love',
+             'Love', 'Party', 'Love', 'Happy', 'Party'],
+    'description': [
+        'A high-energy dance number with catchy lyrics and vibrant visuals.',
+        'A soothing melody expressing longing and the desire for more time with a loved one.',
+        'A classic romantic song with a mesmerizing melody and heartfelt lyrics.',
+        'A viral folk-pop song with humorous lyrics about heartbreak and revenge.',
+        'A beautiful romantic song depicting the innocence and purity of love.',
+        'A timeless romantic melody about the magic and transformative power of love.',
+        'An energetic dance song with a fast-paced rhythm and playful lyrics.',
+        'A soulful romantic song expressing deep emotions and connection.',
+        'An upbeat and cheerful song about the joy of storytelling and friendship.',
+        'A high-energy dance number with a folk influence, perfect for celebrations.'
+    ]
+}
+
+df = pd.DataFrame(data)
+
+def create_features(df):
+    """Combines relevant columns into a single feature string for each song."""
+    df['features'] = df['singer'] + ' ' + df['genre'] + ' ' + df['mood'] + ' ' + df['description']
+    return df
+
+df = create_features(df)
+
+def train_model(df):
+    """Trains the recommendation model using TF-IDF and cosine similarity."""
+    tfidf = TfidfVectorizer(stop_words='english')  # Remove common English words
+    tfidf_matrix = tfidf.fit_transform(df['features'])
+    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+    return cosine_sim
+
+cosine_sim = train_model(df)
+
+def get_recommendations(singer_name, cosine_sim=cosine_sim, df=df, num_recommendations=5):
+    """Recommends songs based on a selected singer."""
+    singer_songs_indices = df[df['singer'] == singer_name].index.tolist()
+
+    if not singer_songs_indices:
+        return []
+
+    similarity_scores = np.mean(cosine_sim[singer_songs_indices], axis=0)
+    similar_songs_indices = np.argsort(similarity_scores)[::-1]
+    similar_songs_indices = [i for i in similar_songs_indices if i not in singer_songs_indices]
+    similar_songs_indices = similar_songs_indices[:num_recommendations]
+
+    recommended_songs = df.iloc[similar_songs_indices][['song_name', 'genre', 'mood', 'description']]
+    return recommended_songs
+
+# Streamlit UI
+st.title("🎶Music Recommendation System")
+singer_name = st.selectbox('Select a Singer:', [None] + list(df['singer'].unique()))
+
+if singer_name:
+    recommendations = get_recommendations(singer_name)
+    if not recommendations.empty:
+        st.subheader(f"Recommended songs for {singer_name}:")
+        for i, row in recommendations.iterrows():
+            st.write(f"{i + 1}. *{row['song_name']}*")
+            st.write(f"   - Genre: {row['genre']}")
+            st.write(f"   - Mood: {row['mood']}")
+            st.write(f"   - Description: {row['description']}")
+            st.write("---")
+    else:
+        st.write("No recommendations found.")
